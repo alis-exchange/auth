@@ -26,8 +26,10 @@ type Client struct {
 	ID          string
 	Secret      string
 	CallbackURL string
-	// Useful to set to true, if you store the tokens for connections to other services.
-	// Do NOT set to true if the tokens are provided by the client in order to access your service.
+
+	// Set to true if you store the tokens in your database for connections to OTHER services.
+	// This will skip fetching the public keys from the JWKSURL, speeding up the authentication process.
+	// Do NOT set to true if the tokens are provided by the client in order to access YOUR service.
 	SkipSignatureValidation bool
 	keys                    sync.Map
 }

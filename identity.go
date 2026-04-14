@@ -3,9 +3,11 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"google.golang.org/grpc/metadata"
 )
@@ -41,6 +43,9 @@ type (
 // PolicyMember returns the member to use in iam policy bindings.
 // E.g. "user:1234129384" or "serviceAccount:alis-build@myproject.iam.gserviceaccount.com"
 func (i *Identity) PolicyMember() string {
+	if i.Type == ServiceAccount {
+		return string(i.Type) + ":" + i.Email
+	}
 	return string(i.Type) + ":" + i.ID
 }
 
@@ -134,4 +139,29 @@ func MustFromIncomingMetadata(ctx context.Context) *Identity {
 		panic(fmt.Sprintf("identity.MustFromIncomingMetadata: %v", err))
 	}
 	return identity
+}
+
+// FromJWT decodes and unmarshals the given jwt into an Identity.
+func FromJWT(jwt string) (*Identity, error) {
+	parts := strings.Split(jwt, ".")
+	if len(parts) != 3 {
+		return nil, errors.New("invalid token format, expect {hdr}.{body}.{sig}")
+	}
+
+	body, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode payload: %w", err)
+	}
+
+	var identity Identity
+	if err := json.Unmarshal(body, &identity); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+	}
+	if strings.HasSuffix(identity.Email, ".iam.gserviceaccount.com") {
+		identity.Type = ServiceAccount
+	} else {
+		identity.Type = User
+	}
+
+	return &identity, nil
 }
