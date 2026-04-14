@@ -2,23 +2,28 @@ package authn
 
 import (
 	"os"
-	"slices"
 )
 
-var systemMembers = []string{}
+var systemEmails = []string{}
 
 func init() {
 	alisOsProjectEnv := os.Getenv("ALIS_OS_PROJECT")
 	if alisOsProjectEnv != "" {
 		environmentServiceAccountEmail := "alis-build@" + alisOsProjectEnv + ".iam.gserviceaccount.com"
-		systemMembers = append(systemMembers, "serviceAccount:"+environmentServiceAccountEmail)
+		systemEmails = append(systemEmails, environmentServiceAccountEmail)
 	}
 }
 
-func AddSystemMembers(members ...string) {
-	systemMembers = append(systemMembers, members...)
+func AddSystemEmail(email string) {
+	systemEmails = append(systemEmails, email)
 }
 
 func (i *Identity) IsSystem() bool {
-	return slices.Contains(systemMembers, i.PolicyMember())
+	return i.system
+}
+
+var SystemIdentity = &Identity{
+	Type:   System,
+	ID:     "system",
+	system: true,
 }
