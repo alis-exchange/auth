@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/alis-exchange/auth/authn"
@@ -52,7 +53,10 @@ func (a *Authorizer) rolesFromPolicies(policies ...*iampb.Policy) []string {
 			}
 			for _, memberText := range binding.Members {
 				member := new(Member).parse(memberText)
-				if resolver, ok := memberResolvers[member.Type]; ok {
+				memberResolversMu.RLock()
+				resolver, ok := memberResolvers[member.Type]
+				memberResolversMu.RUnlock()
+				if ok {
 					if resolver(a.identity, member) {
 						roles = append(roles, binding.Role)
 						break
@@ -78,25 +82,31 @@ func (m *Member) parse(text string) *Member {
 	return m
 }
 
-var memberResolvers = map[string]func(identity *authn.Identity, member *Member) bool{
-	"user": func(identity *authn.Identity, member *Member) bool {
-		return identity.Type == authn.User && identity.ID == member.ID
-	},
-	"serviceAccount": func(identity *authn.Identity, member *Member) bool {
-		return identity.Type == authn.ServiceAccount && identity.ID == member.ID
-	},
-	"domain": func(identity *authn.Identity, member *Member) bool {
-		return strings.HasPrefix(identity.Email, "@"+member.ID)
-	},
-	"group": func(identity *authn.Identity, member *Member) bool {
-		return slices.Contains(identity.GroupIDs, member.ID)
-	},
-	"email": func(identity *authn.Identity, member *Member) bool {
-		return identity.Email == member.ID
-	},
-}
+var (
+	memberResolversMu sync.RWMutex
+	memberResolvers   = map[string]func(identity *authn.Identity, member *Member) bool{
+		"user": func(identity *authn.Identity, member *Member) bool {
+			return identity.Type == authn.User && identity.ID == member.ID
+		},
+		"serviceAccount": func(identity *authn.Identity, member *Member) bool {
+			return identity.Type == authn.ServiceAccount && identity.ID == member.ID
+		},
+		"domain": func(identity *authn.Identity, member *Member) bool {
+			return strings.HasSuffix(identity.Email, "@"+member.ID)
+		},
+		"group": func(identity *authn.Identity, member *Member) bool {
+			return slices.Contains(identity.GroupIDs, member.ID)
+		},
+		"email": func(identity *authn.Identity, member *Member) bool {
+			return identity.Email == member.ID
+		},
+	}
+)
 
 func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Identity, member *Member) bool) error {
+	memberResolversMu.Lock()
+	defer memberResolversMu.Unlock()
+
 	for _, memberType := range memberTypes {
 		if _, ok := memberResolvers[memberType]; ok {
 			return fmt.Errorf("resolver already registered for '%s'", memberType)
@@ -108,6 +118,7 @@ func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Ident
 
 type PolicyFetcher struct {
 	eg       errgroup.Group
+	mu       sync.Mutex
 	policies []*iampb.Policy
 }
 
