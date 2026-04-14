@@ -2,6 +2,7 @@ package auth
 
 import (
 	"os"
+	"slices"
 )
 
 var systemEmails = []string{}
@@ -16,6 +17,12 @@ func init() {
 
 func AddSystemEmail(email string) {
 	systemEmails = append(systemEmails, email)
+}
+
+func (i *Identity) checkIfSystem() {
+	if slices.Contains(systemEmails, i.Email) {
+		i.Type = System
+	}
 }
 
 func (i *Identity) IsSystem() bool {

@@ -66,6 +66,7 @@ func FromContext(ctx context.Context) (*Identity, error) {
 	if !ok || identity == nil {
 		return nil, errors.New("no Identity found in ctx")
 	}
+	identity.checkIfSystem()
 	return identity, nil
 }
 
@@ -96,6 +97,7 @@ func Unmarshal(data []byte) (*Identity, error) {
 	if err := json.Unmarshal(data, &identity); err != nil {
 		return nil, err
 	}
+	identity.checkIfSystem()
 	return &identity, nil
 }
 
@@ -129,6 +131,7 @@ func FromIncomingMetadata(ctx context.Context) (*Identity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unmarshalling incoming metadata: %v", err)
 	}
+	identity.checkIfSystem()
 	return identity, nil
 }
 
@@ -163,5 +166,15 @@ func FromJWT(jwt string) (*Identity, error) {
 		identity.Type = User
 	}
 
+	identity.checkIfSystem()
 	return &identity, nil
+}
+
+// MustFromJWT does the same as FromJWT, but panics on an error.
+func MustFromJWT(jwt string) *Identity {
+	identity, err := FromJWT(jwt)
+	if err != nil {
+		panic(fmt.Sprintf("identity.MustFromJWT: %v", err))
+	}
+	return identity
 }
