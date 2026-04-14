@@ -11,6 +11,7 @@ import (
 	"github.com/alis-exchange/auth/authn"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 type Authorizer struct {
@@ -116,7 +117,7 @@ func (pf *PolicyFetcher) FromRemoteMethod(ctx context.Context, function func(ctx
 			Resource: resource,
 		})
 		if err != nil {
-			return err
+			return status.Errorf(status.Code(err), "getting iam policy from %s", resource)
 		}
 		pf.policies = append(pf.policies, policy)
 		return nil
@@ -129,9 +130,27 @@ func (pf *PolicyFetcher) FromLocalMethod(ctx context.Context, function func(ctx 
 			Resource: resource,
 		})
 		if err != nil {
-			return err
+			return status.Errorf(status.Code(err), "getting iam policy from %s", resource)
 		}
 		pf.policies = append(pf.policies, policy)
 		return nil
 	})
+}
+
+func (pf *PolicyFetcher) Policies() ([]*iampb.Policy, error) {
+	if err := pf.eg.Wait(); err != nil {
+		return nil, err
+	}
+	return pf.policies, nil
+}
+
+func (pf *PolicyFetcher) MustPolicies(ignoreErrors bool) []*iampb.Policy {
+	policies, err := pf.Policies()
+	if err != nil {
+		if ignoreErrors {
+			return nil
+		}
+		panic(err)
+	}
+	return policies
 }
