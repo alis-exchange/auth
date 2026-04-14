@@ -29,7 +29,7 @@ func (pf *Pool) AddFromRemoteMethod(ctx context.Context, function func(ctx conte
 		if err != nil {
 			return status.Errorf(status.Code(err), "getting iam policy from %s", resource)
 		}
-		pf.policies = append(pf.policies, policy)
+		pf.Add(policy)
 		return nil
 	})
 }
@@ -42,9 +42,15 @@ func (pf *Pool) AddFromLocalMethod(ctx context.Context, function func(ctx contex
 		if err != nil {
 			return status.Errorf(status.Code(err), "getting iam policy from %s", resource)
 		}
-		pf.policies = append(pf.policies, policy)
+		pf.Add(policy)
 		return nil
 	})
+}
+
+func (pf *Pool) Add(policies ...*iampb.Policy) {
+	pf.mu.Lock()
+	defer pf.mu.Unlock()
+	pf.policies = append(pf.policies, policies...)
 }
 
 func (pf *Pool) WaitPolicies() ([]*iampb.Policy, error) {
