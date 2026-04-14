@@ -87,6 +87,9 @@ var memberResolvers = map[string]func(identity *authn.Identity, member *Member) 
 	"group": func(identity *authn.Identity, member *Member) bool {
 		return slices.Contains(identity.GroupIDs, member.ID)
 	},
+	"email": func(identity *authn.Identity, member *Member) bool {
+		return identity.Email == member.ID
+	},
 }
 
 func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Identity, member *Member) bool) error {

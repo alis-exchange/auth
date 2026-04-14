@@ -80,3 +80,38 @@ func TestHasRoleFromOnceOffPolicy(t *testing.T) {
 		t.Fatal("expected not to have role 'roles/editor'")
 	}
 }
+
+func TestMemberResolvers(t *testing.T) {
+	AddMemberResolver([]string{"account"}, func(identity *authn.Identity, member *Member) bool {
+		switch member.ID {
+		case "abc":
+			return true
+		}
+		return false
+	})
+	testAZ := New(testIdentity)
+	if !testAZ.HasRole([]string{"roles/admin"}, &iampb.Policy{
+		Bindings: []*iampb.Binding{
+			{
+				Role: "roles/admin",
+				Members: []string{
+					"account:abc",
+				},
+			},
+		},
+	}) {
+		t.Fatal("expected to have role 'roles/admin'")
+	}
+	if testAZ.HasRole([]string{"roles/admin"}, &iampb.Policy{
+		Bindings: []*iampb.Binding{
+			{
+				Role: "roles/admin",
+				Members: []string{
+					"account:def",
+				},
+			},
+		},
+	}) {
+		t.Fatal("expected not to have role 'roles/admin'")
+	}
+}
