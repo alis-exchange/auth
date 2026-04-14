@@ -1,22 +1,41 @@
 package authz
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/alis-exchange/auth/authn"
+	"google.golang.org/protobuf/proto"
 )
 
 var testIdentity = &authn.Identity{
 	Type:     authn.User,
 	ID:       "1934872948",
 	Email:    "john@example.com",
-	Roles:    []string{"roles/viewer"},
 	GroupIDs: []string{"df913r888"},
 }
 
+func init() {
+	identityPolicy := &iampb.Policy{
+		Bindings: []*iampb.Binding{
+			{
+				Role: "roles/viewer",
+				Members: []string{
+					"user:" + testIdentity.ID,
+				},
+			},
+		},
+	}
+	marshaledPolicy, err := proto.Marshal(identityPolicy)
+	if err != nil {
+		panic(err)
+	}
+	testIdentity.Policy = base64.StdEncoding.EncodeToString(marshaledPolicy)
+}
+
 func TestHasRoleFromIdentity(t *testing.T) {
-	testAZ := New(testIdentity)
+	testAZ := MustNew(testIdentity)
 	if !testAZ.HasRole([]string{"roles/admin", "roles/editor", "roles/viewer"}) {
 		t.Fatal("expected to have role 'roles/viewer'")
 	}
@@ -26,7 +45,7 @@ func TestHasRoleFromIdentity(t *testing.T) {
 }
 
 func TestHasRoleFromPolicy(t *testing.T) {
-	testAZ := New(testIdentity)
+	testAZ := MustNew(testIdentity)
 	testAZ.AddRolesFromPolicies(&iampb.Policy{
 		Bindings: []*iampb.Binding{
 			{
@@ -54,7 +73,7 @@ func TestHasRoleFromPolicy(t *testing.T) {
 }
 
 func TestHasRoleFromOnceOffPolicy(t *testing.T) {
-	testAZ := New(testIdentity)
+	testAZ := MustNew(testIdentity)
 	onceOffPolicy := &iampb.Policy{
 		Bindings: []*iampb.Binding{
 			{
@@ -89,7 +108,7 @@ func TestMemberResolvers(t *testing.T) {
 		}
 		return false
 	})
-	testAZ := New(testIdentity)
+	testAZ := MustNew(testIdentity)
 	if !testAZ.HasRole([]string{"roles/admin"}, &iampb.Policy{
 		Bindings: []*iampb.Binding{
 			{

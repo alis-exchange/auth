@@ -2,17 +2,13 @@
 package authz
 
 import (
-	"context"
+	"encoding/base64"
 	"fmt"
 	"slices"
-	"strings"
-	"sync"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/alis-exchange/auth/authn"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 type Authorizer struct {
@@ -20,15 +16,51 @@ type Authorizer struct {
 	roles    []string
 }
 
-func New(identity *authn.Identity) *Authorizer {
+func New(identity *authn.Identity) (*Authorizer, error) {
+	var roles []string
+
+	// extract roles from iam policy if any
+	if identity.Policy != "" {
+		policyBytes, err := base64.StdEncoding.DecodeString(identity.Policy)
+		if err != nil {
+			return nil, fmt.Errorf("decoding identity iam policy: %w", err)
+		}
+		if len(policyBytes) > 0 {
+			policy := &iampb.Policy{}
+			err = proto.Unmarshal(policyBytes, policy)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshalling identity iam policy: %w", err)
+			}
+			roles = rolesFromPolicies(identity, policy)
+		}
+	}
+
+	// return authorizer
 	return &Authorizer{
 		identity: identity,
-		roles:    identity.Roles,
-	}
+		roles:    roles,
+	}, nil
 }
 
-func (a *Authorizer) HasRole(roles []string, onceOffPolicies ...*iampb.Policy) bool {
-	allRoles := append(a.roles, a.rolesFromPolicies(onceOffPolicies...)...)
+func MustNew(identity *authn.Identity) *Authorizer {
+	authorizer, err := New(identity)
+	if err != nil {
+		panic(err)
+	}
+	return authorizer
+}
+
+// HasRole returns true if the identity has one of the given roles in one of the
+// given policies.
+//
+// If you want to re-use this authorizer in a scenario where the
+// given policies are still relevant, rather use AddRolesFromPolicies to
+// persit the policies in this authorizer. One example is doing an access control
+// check in a List method, using some parent resource policies and then iterating
+// over the database rows which are each individually checked whether the identity
+// has access to them based on a policy in the row.
+func (a *Authorizer) HasRole(roles []string, policies ...*iampb.Policy) bool {
+	allRoles := append(a.roles, rolesFromPolicies(a.identity, policies...)...)
 	for _, role := range roles {
 		if slices.Contains(allRoles, role) {
 			return true
@@ -37,131 +69,32 @@ func (a *Authorizer) HasRole(roles []string, onceOffPolicies ...*iampb.Policy) b
 	return false
 }
 
+// AddRolesFromPolicies adds roles that the identity has from the given policies.
+//
+// Rather provide the policies directly in HasRole if you plan on re-using this
+// authorizer in a context where these policies are not applicable. One example
+// is iterating over a list of database rows (each with their own policy), where
+// one row's policy should not be considered in following row's access control.
 func (a *Authorizer) AddRolesFromPolicies(policies ...*iampb.Policy) {
-	a.roles = append(a.roles, a.rolesFromPolicies(policies...)...)
+	a.AddRoles(rolesFromPolicies(a.identity, policies...)...)
 }
 
-func (a *Authorizer) rolesFromPolicies(policies ...*iampb.Policy) []string {
+// AddRoles adds roles that the identity has.
+func (a *Authorizer) AddRoles(roles ...string) {
+	a.roles = append(a.roles, roles...)
+}
+
+func rolesFromPolicies(identity *authn.Identity, policies ...*iampb.Policy) []string {
 	var roles []string
 	for _, policy := range policies {
 		if policy == nil {
 			continue
 		}
 		for _, binding := range policy.Bindings {
-			if binding == nil {
-				continue
-			}
-			for _, memberText := range binding.Members {
-				member := new(Member).parse(memberText)
-				memberResolversMu.RLock()
-				resolver, ok := memberResolvers[member.Type]
-				memberResolversMu.RUnlock()
-				if ok {
-					if resolver(a.identity, member) {
-						roles = append(roles, binding.Role)
-						break
-					}
-				}
+			if isMember(identity, binding.GetMembers()) {
+				roles = append(roles, binding.Role)
 			}
 		}
 	}
 	return roles
-}
-
-type Member struct {
-	Type string
-	ID   string
-}
-
-func (m *Member) parse(text string) *Member {
-	parts := strings.Split(text, ":")
-	m.Type = parts[0]
-	if len(parts) > 1 {
-		m.ID = strings.Join(parts[1:], ":")
-	}
-	return m
-}
-
-var (
-	memberResolversMu sync.RWMutex
-	memberResolvers   = map[string]func(identity *authn.Identity, member *Member) bool{
-		"user": func(identity *authn.Identity, member *Member) bool {
-			return identity.Type == authn.User && identity.ID == member.ID
-		},
-		"serviceAccount": func(identity *authn.Identity, member *Member) bool {
-			return identity.Type == authn.ServiceAccount && identity.ID == member.ID
-		},
-		"domain": func(identity *authn.Identity, member *Member) bool {
-			return strings.HasSuffix(identity.Email, "@"+member.ID)
-		},
-		"group": func(identity *authn.Identity, member *Member) bool {
-			return slices.Contains(identity.GroupIDs, member.ID)
-		},
-		"email": func(identity *authn.Identity, member *Member) bool {
-			return identity.Email == member.ID
-		},
-	}
-)
-
-func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Identity, member *Member) bool) error {
-	memberResolversMu.Lock()
-	defer memberResolversMu.Unlock()
-
-	for _, memberType := range memberTypes {
-		if _, ok := memberResolvers[memberType]; ok {
-			return fmt.Errorf("resolver already registered for '%s'", memberType)
-		}
-		memberResolvers[memberType] = resolver
-	}
-	return nil
-}
-
-type PolicyFetcher struct {
-	eg       errgroup.Group
-	mu       sync.Mutex
-	policies []*iampb.Policy
-}
-
-func (pf *PolicyFetcher) FromRemoteMethod(ctx context.Context, function func(ctx context.Context, req *iampb.GetIamPolicyRequest, opts ...grpc.CallOption) (*iampb.Policy, error), resource string) {
-	pf.eg.Go(func() error {
-		policy, err := function(ctx, &iampb.GetIamPolicyRequest{
-			Resource: resource,
-		})
-		if err != nil {
-			return status.Errorf(status.Code(err), "getting iam policy from %s", resource)
-		}
-		pf.policies = append(pf.policies, policy)
-		return nil
-	})
-}
-
-func (pf *PolicyFetcher) FromLocalMethod(ctx context.Context, function func(ctx context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error), resource string) {
-	pf.eg.Go(func() error {
-		policy, err := function(ctx, &iampb.GetIamPolicyRequest{
-			Resource: resource,
-		})
-		if err != nil {
-			return status.Errorf(status.Code(err), "getting iam policy from %s", resource)
-		}
-		pf.policies = append(pf.policies, policy)
-		return nil
-	})
-}
-
-func (pf *PolicyFetcher) Policies() ([]*iampb.Policy, error) {
-	if err := pf.eg.Wait(); err != nil {
-		return nil, err
-	}
-	return pf.policies, nil
-}
-
-func (pf *PolicyFetcher) MustPolicies(ignoreErrors bool) []*iampb.Policy {
-	policies, err := pf.Policies()
-	if err != nil {
-		if ignoreErrors {
-			return nil
-		}
-		panic(err)
-	}
-	return policies
 }
