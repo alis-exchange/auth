@@ -1,5 +1,4 @@
-// Package identity provides the base identity structure that authn and authz work with.
-package identity
+package authn
 
 import (
 	"context"
