@@ -22,10 +22,10 @@ func New(identity *authn.Identity) *Authorizer {
 	}
 }
 
-func (a *Authorizer) HasRole(roles []string, onceOfPolicies ...*iampb.Policy) bool {
-	allRoles := append(roles, a.rolesFromPolicies(onceOfPolicies...)...)
-	for _, role := range allRoles {
-		if slices.Contains(a.roles, role) {
+func (a *Authorizer) HasRole(roles []string, onceOffPolicies ...*iampb.Policy) bool {
+	allRoles := append(a.roles, a.rolesFromPolicies(onceOffPolicies...)...)
+	for _, role := range roles {
+		if slices.Contains(allRoles, role) {
 			return true
 		}
 	}
