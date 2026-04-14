@@ -12,6 +12,7 @@ import (
 const (
 	User           Type   = "user"
 	ServiceAccount Type   = "serviceAccount"
+	System         Type   = "system" // can do everything
 	IdentityCtxKey CtxKey = "identity"
 )
 

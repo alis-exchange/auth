@@ -19,11 +19,10 @@ func AddSystemEmail(email string) {
 }
 
 func (i *Identity) IsSystem() bool {
-	return i.system
+	return i.Type == System
 }
 
 var SystemIdentity = &Identity{
-	Type:   System,
-	ID:     "system",
-	system: true,
+	Type: System,
+	ID:   "system",
 }
