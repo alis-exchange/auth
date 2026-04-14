@@ -16,15 +16,24 @@ const (
 )
 
 type (
-	Type     string
-	CtxKey   string
 	Identity struct {
-		Type     Type
-		ID       string   // E.g. "1934872948" or "alis-build@my-project.iam.gserviceaccount.com"
-		Email    string   // E.g. "john@example.com" or "alis-build@myproject.iam.gserviceaccount.com"
-		Roles    []string // Optional environment level roles that the user has, e.g. roles/admin.
-		GroupIDs []string // Optional groups that the user is part of.
+		Type     Type              // Type of the identity
+		ID       string            `json:"sub"`      // E.g. "1934872948" or "alis-build@my-project.iam.gserviceaccount.com"
+		Email    string            `json:"email"`    // E.g. "john@example.com" or "alis-build@myproject.iam.gserviceaccount.com"
+		Accounts map[string]*Seats `json:"accounts"` // User's seats in their accounts
+		GroupIDs []string          `json:"groups"`   // IDs of the groups the user belongs to
+		Policy   string            `json:"policy"`   // Base64 encoded iam policy
+		Exp      int64             `json:"exp"`      // Expiration time in seconds since epoch. Only used for validating tokens.
+		App      string            `json:"app"`      // Client ID (if any) of the registered third party app.
+		Scopes   []string          `json:"scopes"`   // Set of scopes that the third party app has been granted.
 	}
+	Type string
+	Seat struct {
+		Plan int32
+		Seat int32
+	}
+	Seats  map[string]*Seat
+	CtxKey string
 )
 
 // PolicyMember returns the member to use in iam policy bindings.

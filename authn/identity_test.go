@@ -27,7 +27,6 @@ var testIdentity = &Identity{
 	Type:     User,
 	ID:       "1934872948",
 	Email:    "john@example.com",
-	Roles:    []string{"roles/admin"},
 	GroupIDs: []string{"df913r888"},
 }
 
@@ -37,7 +36,7 @@ func TestContext(t *testing.T) {
 	expect(t, identity.Type, testIdentity.Type)
 	expect(t, identity.ID, testIdentity.ID)
 	expect(t, identity.Email, testIdentity.Email)
-	expectSlice(t, identity.Roles, testIdentity.Roles)
+	expect(t, identity.Policy, testIdentity.Policy)
 	expectSlice(t, identity.GroupIDs, testIdentity.GroupIDs)
 }
 
@@ -47,7 +46,7 @@ func TestMarshal(t *testing.T) {
 	expect(t, identity.Type, testIdentity.Type)
 	expect(t, identity.ID, testIdentity.ID)
 	expect(t, identity.Email, testIdentity.Email)
-	expectSlice(t, identity.Roles, testIdentity.Roles)
+	expect(t, identity.Policy, testIdentity.Policy)
 	expectSlice(t, identity.GroupIDs, testIdentity.GroupIDs)
 }
 
@@ -62,6 +61,6 @@ func TestMetadata(t *testing.T) {
 	expect(t, identity.Type, testIdentity.Type)
 	expect(t, identity.ID, testIdentity.ID)
 	expect(t, identity.Email, testIdentity.Email)
-	expectSlice(t, identity.Roles, testIdentity.Roles)
+	expect(t, identity.Policy, testIdentity.Policy)
 	expectSlice(t, identity.GroupIDs, testIdentity.GroupIDs)
 }
