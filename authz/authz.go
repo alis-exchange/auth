@@ -50,16 +50,16 @@ func MustNew(identity *authn.Identity) *Authorizer {
 	return authorizer
 }
 
-// HasRole returns true if the identity has one of the given roles in one of the
-// given policies.
+// HasRole returns true if the identity has one of the specified roles (or is a sytem identity),
+// considering both previously added roles and those from the provided policies.
 //
-// If you want to re-use this authorizer in a scenario where the
-// given policies are still relevant, rather use AddRolesFromPolicies to
-// persit the policies in this authorizer. One example is doing an access control
-// check in a List method, using some parent resource policies and then iterating
-// over the database rows which are each individually checked whether the identity
-// has access to them based on a policy in the row.
+// Note: Policies provided here are evaluated once and not persisted. To persist
+// roles for subsequent checks (e.g., applying parent policies across multiple
+// items in a List method), use AddRolesFromPolicies instead.
 func (a *Authorizer) HasRole(roles []string, policies ...*iampb.Policy) bool {
+	if a.identity.IsSystem() {
+		return true
+	}
 	allRoles := append(a.roles, rolesFromPolicies(a.identity, policies...)...)
 	for _, role := range roles {
 		if slices.Contains(allRoles, role) {
@@ -69,12 +69,11 @@ func (a *Authorizer) HasRole(roles []string, policies ...*iampb.Policy) bool {
 	return false
 }
 
-// AddRolesFromPolicies adds roles that the identity has from the given policies.
+// AddRolesFromPolicies extracts and persists roles for the identity from the given policies.
 //
-// Rather provide the policies directly in HasRole if you plan on re-using this
-// authorizer in a context where these policies are not applicable. One example
-// is iterating over a list of database rows (each with their own policy), where
-// one row's policy should not be considered in following row's access control.
+// Warning: These roles will apply to all subsequent authorizer checks. For context-specific
+// checks (e.g., checking individual row policies in a loop), pass policies directly
+// to HasRole instead to avoid leaking permissions.
 func (a *Authorizer) AddRolesFromPolicies(policies ...*iampb.Policy) {
 	a.AddRoles(rolesFromPolicies(a.identity, policies...)...)
 }
