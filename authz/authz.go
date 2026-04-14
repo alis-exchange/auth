@@ -62,6 +62,9 @@ func (a *Authorizer) HasRole(roles []string, policies ...*iampb.Policy) bool {
 	}
 	allRoles := append(a.roles, rolesFromPolicies(a.identity, policies...)...)
 	for _, role := range roles {
+		if slices.Contains(openRoles, role) {
+			return true
+		}
 		if slices.Contains(allRoles, role) {
 			return true
 		}
