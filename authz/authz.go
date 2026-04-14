@@ -1,4 +1,4 @@
-// Package authz is used to authorize if an identity has access to do a certain action (possibly on a certain resource).
+// Package authz is used to authorize whether an identity has the required role.
 package authz
 
 import (
@@ -6,16 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/alis-exchange/auth/authn"
-)
-
-type MemberType string
-
-const (
-	User           MemberType = "user"
-	ServiceAccount MemberType = "serviceAccount"
-	Domain         MemberType = "domain"
-	Group          MemberType = "group"
 )
 
 type Authorizer struct {
@@ -23,26 +15,84 @@ type Authorizer struct {
 	roles    []string
 }
 
-var memberResolvers = map[MemberType]func(identity *authn.Identity, memberType string, memberID string) bool{
-	User: func(identity *authn.Identity, memberType, memberID string) bool {
-		return identity.Type == authn.User && identity.ID == memberID
+func New(identity *authn.Identity) *Authorizer {
+	return &Authorizer{
+		identity: identity,
+		roles:    identity.Roles,
+	}
+}
+
+func (a *Authorizer) HasRole(roles []string, onceOfPolicies ...*iampb.Policy) bool {
+	allRoles := append(roles, a.rolesFromPolicies(onceOfPolicies...)...)
+	for _, role := range allRoles {
+		if slices.Contains(a.roles, role) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Authorizer) AddRolesFromPolicies(policies ...*iampb.Policy) {
+	a.roles = append(a.roles, a.rolesFromPolicies(policies...)...)
+}
+
+func (a *Authorizer) rolesFromPolicies(policies ...*iampb.Policy) []string {
+	var roles []string
+	for _, policy := range policies {
+		if policy == nil {
+			continue
+		}
+		for _, binding := range policy.Bindings {
+			if binding == nil {
+				continue
+			}
+			for _, memberText := range binding.Members {
+				member := new(Member).parse(memberText)
+				if resolver, ok := memberResolvers[member.Type]; ok {
+					if resolver(a.identity, member) {
+						roles = append(roles, binding.Role)
+						break
+					}
+				}
+			}
+		}
+	}
+	return roles
+}
+
+type Member struct {
+	Type string
+	ID   string
+}
+
+func (m *Member) parse(text string) *Member {
+	parts := strings.Split(text, ":")
+	m.Type = parts[0]
+	if len(parts) > 1 {
+		m.ID = strings.Join(parts[1:], ":")
+	}
+	return m
+}
+
+var memberResolvers = map[string]func(identity *authn.Identity, member *Member) bool{
+	"user": func(identity *authn.Identity, member *Member) bool {
+		return identity.Type == authn.User && identity.ID == member.ID
 	},
-	ServiceAccount: func(identity *authn.Identity, memberType, memberID string) bool {
-		return identity.Type == authn.ServiceAccount && identity.ID == memberID
+	"serviceAccount": func(identity *authn.Identity, member *Member) bool {
+		return identity.Type == authn.ServiceAccount && identity.ID == member.ID
 	},
-	Domain: func(identity *authn.Identity, memberType, memberID string) bool {
-		return strings.HasPrefix(identity.Email, "@"+memberID)
+	"domain": func(identity *authn.Identity, member *Member) bool {
+		return strings.HasPrefix(identity.Email, "@"+member.ID)
 	},
-	Group: func(identity *authn.Identity, memberType, memberID string) bool {
-		return slices.Contains(identity.GroupIDs, memberID)
+	"group": func(identity *authn.Identity, member *Member) bool {
+		return slices.Contains(identity.GroupIDs, member.ID)
 	},
 }
 
-func AddPolicyMemberResolver(memberTypes []string, resolver func(identity *authn.Identity, memberType string, memberID string) bool) error {
-	for _, memberTypeString := range memberTypes {
-		memberType := MemberType(memberTypeString)
-		if memberType == User || memberType == ServiceAccount || memberType == Domain || memberType == Group {
-			return fmt.Errorf("cannot register resolver for builtin type '%s'", memberType)
+func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Identity, member *Member) bool) error {
+	for _, memberType := range memberTypes {
+		if _, ok := memberResolvers[memberType]; ok {
+			return fmt.Errorf("resolver already registered for '%s'", memberType)
 		}
 		memberResolvers[memberType] = resolver
 	}
