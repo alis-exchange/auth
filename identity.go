@@ -1,4 +1,5 @@
-package authn
+// Package auth provides an identity which is shared by the authn and authz packages.
+package auth
 
 import (
 	"context"

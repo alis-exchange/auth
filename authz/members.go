@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/alis-exchange/auth/authn"
+	"github.com/alis-exchange/auth"
 )
 
-func isMember(identity *authn.Identity, members []string) bool {
+func isMember(identity *auth.Identity, members []string) bool {
 	for _, memberText := range members {
 		member := new(Member).parse(memberText)
 		resolver, ok := memberResolvers[member.Type]
@@ -38,26 +38,26 @@ func (m *Member) parse(text string) *Member {
 
 var (
 	memberResolversMu sync.RWMutex
-	memberResolvers   = map[string]func(identity *authn.Identity, member *Member) bool{
-		"user": func(identity *authn.Identity, member *Member) bool {
-			return identity.Type == authn.User && identity.ID == member.ID
+	memberResolvers   = map[string]func(identity *auth.Identity, member *Member) bool{
+		"user": func(identity *auth.Identity, member *Member) bool {
+			return identity.Type == auth.User && identity.ID == member.ID
 		},
-		"serviceAccount": func(identity *authn.Identity, member *Member) bool {
-			return identity.Type == authn.ServiceAccount && identity.ID == member.ID
+		"serviceAccount": func(identity *auth.Identity, member *Member) bool {
+			return identity.Type == auth.ServiceAccount && identity.ID == member.ID
 		},
-		"domain": func(identity *authn.Identity, member *Member) bool {
+		"domain": func(identity *auth.Identity, member *Member) bool {
 			return strings.HasSuffix(identity.Email, "@"+member.ID)
 		},
-		"group": func(identity *authn.Identity, member *Member) bool {
+		"group": func(identity *auth.Identity, member *Member) bool {
 			return slices.Contains(identity.GroupIDs, member.ID)
 		},
-		"email": func(identity *authn.Identity, member *Member) bool {
+		"email": func(identity *auth.Identity, member *Member) bool {
 			return identity.Email == member.ID
 		},
 	}
 )
 
-func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Identity, member *Member) bool) error {
+func AddMemberResolver(memberTypes []string, resolver func(identity *auth.Identity, member *Member) bool) error {
 	memberResolversMu.Lock()
 	defer memberResolversMu.Unlock()
 

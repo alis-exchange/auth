@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
-	"github.com/alis-exchange/auth/authn"
+	"github.com/alis-exchange/auth"
 	"google.golang.org/protobuf/proto"
 )
 
-var testIdentity = &authn.Identity{
-	Type:     authn.User,
+var testIdentity = &auth.Identity{
+	Type:     auth.User,
 	ID:       "1934872948",
 	Email:    "john@example.com",
 	GroupIDs: []string{"df913r888"},
@@ -101,7 +101,7 @@ func TestHasRoleFromOnceOffPolicy(t *testing.T) {
 }
 
 func TestMemberResolvers(t *testing.T) {
-	AddMemberResolver([]string{"account"}, func(identity *authn.Identity, member *Member) bool {
+	AddMemberResolver([]string{"account"}, func(identity *auth.Identity, member *Member) bool {
 		switch member.ID {
 		case "abc":
 			return true

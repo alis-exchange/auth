@@ -3,7 +3,7 @@ package authz
 import (
 	"testing"
 
-	"github.com/alis-exchange/auth/authn"
+	"github.com/alis-exchange/auth"
 )
 
 func init() {
@@ -21,8 +21,8 @@ func init() {
 }
 
 func TestHasPermission(t *testing.T) {
-	identity := &authn.Identity{
-		Type: authn.User,
+	identity := &auth.Identity{
+		Type: auth.User,
 		ID:   "1234",
 	}
 	authorizer := MustNew(identity)
