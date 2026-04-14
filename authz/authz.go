@@ -2,12 +2,15 @@
 package authz
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/alis-exchange/auth/authn"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 type Authorizer struct {
@@ -100,4 +103,35 @@ func AddMemberResolver(memberTypes []string, resolver func(identity *authn.Ident
 		memberResolvers[memberType] = resolver
 	}
 	return nil
+}
+
+type PolicyFetcher struct {
+	eg       errgroup.Group
+	policies []*iampb.Policy
+}
+
+func (pf *PolicyFetcher) FromRemoteMethod(ctx context.Context, function func(ctx context.Context, req *iampb.GetIamPolicyRequest, opts ...grpc.CallOption) (*iampb.Policy, error), resource string) {
+	pf.eg.Go(func() error {
+		policy, err := function(ctx, &iampb.GetIamPolicyRequest{
+			Resource: resource,
+		})
+		if err != nil {
+			return err
+		}
+		pf.policies = append(pf.policies, policy)
+		return nil
+	})
+}
+
+func (pf *PolicyFetcher) FromLocalMethod(ctx context.Context, function func(ctx context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error), resource string) {
+	pf.eg.Go(func() error {
+		policy, err := function(ctx, &iampb.GetIamPolicyRequest{
+			Resource: resource,
+		})
+		if err != nil {
+			return err
+		}
+		pf.policies = append(pf.policies, policy)
+		return nil
+	})
 }
