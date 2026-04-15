@@ -16,7 +16,7 @@ const (
 	User           Type   = "user"
 	ServiceAccount Type   = "serviceAccount"
 	System         Type   = "system" // can do everything
-	IdentityCtxKey CtxKey = "identity"
+	IdentityCtxKey CtxKey = "x-alis-identity"
 )
 
 type (
