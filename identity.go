@@ -16,7 +16,7 @@ const (
 	User           Type   = "user"
 	ServiceAccount Type   = "serviceAccount"
 	System         Type   = "system" // can do everything
-	IdentityCtxKey CtxKey = "x-alis-identity"
+	identityCtxKey ctxKey = "x-alis-identity"
 )
 
 type (
@@ -37,7 +37,7 @@ type (
 		Seat int32
 	}
 	Seats  map[string]*Seat
-	CtxKey string
+	ctxKey string
 )
 
 // PolicyMember returns the member to use in iam policy bindings.
@@ -53,12 +53,12 @@ func (i *Identity) PolicyMember() string {
 // Use OutgoingMetadata if you want remote services to identify the requester.
 // You can use Context and OutgoingMetadata together.
 func (i *Identity) Context(ctx context.Context) context.Context {
-	return context.WithValue(ctx, IdentityCtxKey, i)
+	return context.WithValue(ctx, identityCtxKey, i)
 }
 
 // FromContext returns the Identity inside the given ctx, if any.
 func FromContext(ctx context.Context) (*Identity, error) {
-	ctxValue := ctx.Value(IdentityCtxKey)
+	ctxValue := ctx.Value(identityCtxKey)
 	if ctxValue == nil {
 		return nil, errors.New("no Identity found in ctx")
 	}
